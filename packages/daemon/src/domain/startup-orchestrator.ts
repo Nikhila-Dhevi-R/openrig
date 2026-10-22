@@ -918,7 +918,22 @@ export class StartupOrchestrator {
     const maxDelay = 16_000;
 
     while (true) {
-      const result = await adapter.checkReady(binding);
+      const remainingBeforeCheck = Math.max(0, timeoutMs - (Date.now() - startTime));
+      const readinessCheck = adapter.checkReady(binding);
+      let timedOut = false;
+      let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+      const result = await Promise.race([
+        readinessCheck,
+        new Promise<import("./runtime-adapter.js").ReadinessResult>((resolve) => {
+          timeoutTimer = setTimeout(() => {
+            timedOut = true;
+            resolve({ ready: false, reason: "readiness timeout" });
+          }, remainingBeforeCheck);
+        }),
+      ]).finally(() => {
+        if (timeoutTimer !== undefined) clearTimeout(timeoutTimer);
+      });
+      if (timedOut) return result;
       if (result.ready) return result;
       if (isAttentionRequiredReadinessCode(result.code)) {
         return result;

@@ -33,7 +33,7 @@ export interface ProbeShellReadyInput {
 const SHELL_COMMANDS = new Set(["bash", "fish", "nu", "sh", "tmux", "zsh"]);
 // Provider model identifiers are not limited to the default gpt-* family.
 // Keep the fallback structural so ordinary status prose cannot prove readiness.
-const CODEX_MODEL_FIELD = /^[A-Za-z][A-Za-z0-9._:/@-]*\d[A-Za-z0-9._:/@-]*(?: [A-Za-z][\w-]*)?(?:\s+⚠ \d+ warnings?)?$/i;
+const CODEX_MODEL_FIELD = /^[A-Za-z][A-Za-z0-9._:/@-]*[._:/@-]\d[A-Za-z0-9._:/@-]*(?: [A-Za-z][\w-]*)?(?:\s+⚠ \d+ warnings?)?$/i;
 
 export function buildNativeResumeCommand(
   runtime: string | null,
@@ -220,14 +220,18 @@ export function assessNativeResumeProbe(
     // Only the current-format panel can override TUI evidence. Legacy text
     // retains its existing position after the TUI check, including scrollback.
     const currentTrustPrompt = looksLikeCurrentCodexTrustPrompt(paneContent);
-    if (!currentTrustPrompt && looksLikeCodexTui(paneContent, input.codexProcessVerified === true)) {
+    const legacyTrustPrompt = looksLikeCodexTrustPrompt(paneContent);
+    const dismissedLegacyTrustPrompt = paneContent.includes("OpenAI Codex (v")
+      || input.codexProcessVerified === true && hasCodexCustomModelFooterAfterComposer(paneContent);
+    if (!currentTrustPrompt && (!legacyTrustPrompt || dismissedLegacyTrustPrompt)
+      && looksLikeCodexTui(paneContent, input.codexProcessVerified === true)) {
       return {
         status: "resumed",
         code: "active_runtime",
         detail: "Codex is running with an active interactive TUI in the probe pane.",
       };
     }
-    if (currentTrustPrompt || looksLikeCodexTrustPrompt(paneContent)) {
+    if (currentTrustPrompt || (legacyTrustPrompt && !dismissedLegacyTrustPrompt)) {
       return {
         status: "inconclusive",
         code: "trust_gate",
@@ -408,8 +412,10 @@ function looksLikeCodexTui(paneContent: string, codexProcessVerified: boolean): 
   // corroboration structural: an indented status row and a whole model field,
   // not a model mentioned somewhere in conversation prose.
   // A custom row must not make an unresolved trust/update panel disappear.
-  const hasCustomModelFooter = (hasDelimitedModelFooter || codexProcessVerified && hasCodexModelFooterAfterComposer(recentLines))
-    && !looksLikeCodexTrustPrompt(current)
+  const verifiedCustomModelFooter = codexProcessVerified && hasCodexCustomModelFooterAfterComposer(recentLines);
+  const activeLegacyTrustPrompt = looksLikeCodexTrustPrompt(current) && !verifiedCustomModelFooter;
+  const hasCustomModelFooter = (hasDelimitedModelFooter || verifiedCustomModelFooter)
+    && !activeLegacyTrustPrompt
     && !hasCodexUpdateHeader(current) && !current.includes("Updating Codex");
   return hasPromptLine && (current.includes("OpenAI Codex (v") || hasDefaultModelFooter || hasCustomModelFooter);
 }
@@ -461,13 +467,14 @@ function hasCodexGptModelFooter(paneContent: string): boolean {
     || paneContent.split("\n").some(isCodexGptModelFooterLine);
 }
 
-function hasCodexModelFooterAfterComposer(paneContent: string): boolean {
+function hasCodexCustomModelFooterAfterComposer(paneContent: string): boolean {
   const lines = paneContent.split("\n");
   let lastComposer = -1;
   for (let index = 0; index < lines.length; index += 1) {
     if (hasCodexComposer(lines[index]!)) lastComposer = index;
   }
-  return lastComposer >= 0 && lines.slice(lastComposer + 1).some(isCodexModelFooterLine);
+  return lastComposer >= 0 && lines.slice(lastComposer + 1).some((line) =>
+    isCodexModelFooterLine(line) && !isCodexGptModelFooterLine(line));
 }
 
 function looksLikeCurrentCodexTrustPrompt(paneContent: string): boolean {

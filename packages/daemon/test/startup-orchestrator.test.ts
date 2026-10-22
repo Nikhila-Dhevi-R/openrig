@@ -1722,6 +1722,22 @@ describe("StartupOrchestrator", () => {
         errors: ["Startup requires attention: workspace trust required", expect.stringContaining("rig seat continue")],
       });
     });
+
+    it("bounds a readiness check that never returns by the startup deadline", async () => {
+      const seed = seedSession();
+      const adapter = mockAdapter({
+        checkReady: vi.fn(() => new Promise<ReadinessResult>(() => {})),
+      });
+      const pending = createOrchestrator().startNode(makeInput(seed, { adapter, readinessTimeoutMs: 100 }));
+
+      await vi.advanceTimersByTimeAsync(100);
+
+      await expect(pending).resolves.toMatchObject({
+        ok: false,
+        startupStatus: "failed",
+        errors: [expect.stringContaining("Readiness timeout after 0.1s")],
+      });
+    });
   });
 
   it("readiness retries until ready", async () => {

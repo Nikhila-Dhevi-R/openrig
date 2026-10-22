@@ -110,13 +110,19 @@ describe("startup consent and effect boundary", () => {
     setup.tmuxAdapter.listPanes = vi.fn(async () => [{ id: "%1", index: 0, cwd: "/p", width: 80, height: 24, active: true }]) as never;
     setup.tmuxAdapter.getPaneCommand = vi.fn(async () => "zsh");
     setup.tmuxAdapter.getPanePid = vi.fn(async () => 900);
-    setup.tmuxAdapter.capturePaneContent = vi.fn(async () => [
-      "› ",
-      "  Ready · Context 13% used · anthropic/claude-3.5-sonnet         ⚠ 2 warnings · f2 to view",
-    ].join("\n"));
+    let captures = 0;
+    setup.tmuxAdapter.capturePaneContent = vi.fn(async () => {
+      captures++;
+      if (captures === 1) return "  project2 · main\n› codex resume 019a136b-0000-7000-8000-000000000001";
+      return [
+        "› ",
+        "  Ready · Context 13% used · anthropic/claude-3.5-sonnet         ⚠ 2 warnings · f2 to view",
+      ].join("\n");
+    });
 
     const response = await setup.app.request(`/api/startup/${rig.id}`);
     expect((await response.json()).seats[0].observed).toMatchObject({ state: "running" });
+    expect(captures).toBe(2);
   });
   it("reports unavailable transport without authorizing fresh replacement", async () => {
     const { rig, node } = seat();

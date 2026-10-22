@@ -837,7 +837,10 @@ export class CodexRuntimeAdapter implements RuntimeAdapter {
       const process = await verifyCodexPaneProcess({ target: binding.tmuxSession, tmux: this.tmux as { getPanePid(target: string): Promise<number | null> },
         listProcesses: this.listProcesses as never });
       if (process) {
-        probe = assessNativeResumeProbe({ runtime: "codex", paneCommand, paneContent, codexProcessVerified: true });
+        const currentPaneCommand = await this.tmux.getPaneCommand(binding.tmuxSession);
+        const currentPaneContent = await this.captureProbeScreen(binding.tmuxSession);
+        probe = assessNativeResumeProbe({ runtime: "codex", paneCommand: currentPaneCommand,
+          paneContent: currentPaneContent, codexProcessVerified: true });
       }
     }
 
@@ -1369,6 +1372,16 @@ export class CodexRuntimeAdapter implements RuntimeAdapter {
           : await verifyCodexPaneProcess({ target: tmuxSession, tmux: this.tmux as { getPanePid(target: string): Promise<number | null> },
             listProcesses: this.listProcesses as never });
         if (process) {
+          const current = resumeToken
+            ? await this.beforeResumeDeadline(async () => ({
+              command: await this.tmux.getPaneCommand(tmuxSession),
+              content: await this.captureProbeScreen(tmuxSession),
+            }), deadline)
+            : { command: await this.tmux.getPaneCommand(tmuxSession), content: await this.captureProbeScreen(tmuxSession) };
+          if (!current) break;
+          paneCommand = current.command;
+          paneContent = current.content;
+          lastPaneContent = paneContent;
           probe = assessNativeResumeProbe({ runtime: "codex", paneCommand, paneContent, codexProcessVerified: true });
         }
       }

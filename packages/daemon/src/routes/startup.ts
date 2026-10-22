@@ -85,7 +85,12 @@ async function observeSeat(c: Context, rig: RigWithRelations, node: Node) {
     let probe = assessNativeResumeProbe({ runtime: node.runtime, paneCommand, paneContent });
     if (node.runtime === "codex" && (probe.code === "returned_to_shell" || probe.code === "awaiting_runtime")) {
       const process = await verifyCodexPaneProcess({ target: pane.pane, tmux: tmux(c), listProcesses });
-      if (process) probe = assessNativeResumeProbe({ runtime: node.runtime, paneCommand, paneContent, codexProcessVerified: true });
+      if (process) {
+        const currentPaneCommand = await tmux(c).getPaneCommand(pane.pane);
+        const currentPaneContent = (tmux(c).capturePaneScreen ? await tmux(c).capturePaneScreen(pane.pane) : await tmux(c).capturePaneContent(pane.pane, 40)) ?? "";
+        probe = assessNativeResumeProbe({ runtime: node.runtime, paneCommand: currentPaneCommand,
+          paneContent: currentPaneContent, codexProcessVerified: true });
+      }
     }
     // A script-launched runtime reads as `sh` until the script hands over the foreground: name a shell only when proven idle.
     if (probe.code === "returned_to_shell" && !await verifyPaneIdleShell({ target: pane.pane, tmux: tmux(c),

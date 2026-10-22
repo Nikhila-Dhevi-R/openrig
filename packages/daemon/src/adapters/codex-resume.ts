@@ -139,6 +139,7 @@ export class CodexResumeAdapter {
     const maxWaitMs = this.options.maxWaitMs ?? 5_000;
     const sleepFn = this.options.sleep ?? sleep;
     const attempts = Math.max(1, Math.floor(maxWaitMs / Math.max(pollMs, 1)) + 1);
+    let idleShellEvidence: boolean | undefined;
 
     for (let attempt = 0; attempt < attempts; attempt++) {
       const paneCommand = await this.tmux.getPaneCommand(tmuxSessionName);
@@ -150,10 +151,18 @@ export class CodexResumeAdapter {
       });
 
       if (probe.code === "returned_to_shell" || probe.code === "awaiting_runtime") {
-        const process = await verifyCodexPaneProcess({ target: tmuxSessionName,
+        const returnedToShell = probe.code === "returned_to_shell" && paneCommand && SHELL_COMMANDS.has(paneCommand);
+        if (returnedToShell && idleShellEvidence === undefined) {
+          idleShellEvidence = await verifyPaneIdleShell({ target: tmuxSessionName, tmux: this.tmux,
+            ...(this.options.listProcesses ? { listProcesses: this.options.listProcesses } : {}) });
+        }
+        const process = idleShellEvidence === true ? null : await verifyCodexPaneProcess({ target: tmuxSessionName,
           tmux: this.tmux as { getPanePid(target: string): Promise<number | null> }, listProcesses: this.options.listProcesses });
         if (process) {
-          probe = assessNativeResumeProbe({ runtime: "codex", paneCommand, paneContent, codexProcessVerified: true });
+          const currentPaneCommand = await this.tmux.getPaneCommand(tmuxSessionName);
+          const currentPaneContent = (await this.tmux.capturePaneContent(tmuxSessionName, 40)) ?? "";
+          probe = assessNativeResumeProbe({ runtime: "codex", paneCommand: currentPaneCommand,
+            paneContent: currentPaneContent, codexProcessVerified: true });
         }
       }
 
@@ -194,12 +203,19 @@ export class CodexResumeAdapter {
       paneCommand: finalCommand,
       paneContent: finalContent,
     });
+    const finalIdleShell = finalCommand && SHELL_COMMANDS.has(finalCommand)
+      ? idleShellEvidence ?? await verifyPaneIdleShell({ target: tmuxSessionName, tmux: this.tmux,
+        ...(this.options.listProcesses ? { listProcesses: this.options.listProcesses } : {}) })
+      : false;
 
     if (finalProbe.code === "returned_to_shell" || finalProbe.code === "awaiting_runtime") {
-      const process = await verifyCodexPaneProcess({ target: tmuxSessionName,
+      const process = finalIdleShell ? null : await verifyCodexPaneProcess({ target: tmuxSessionName,
         tmux: this.tmux as { getPanePid(target: string): Promise<number | null> }, listProcesses: this.options.listProcesses });
       if (process) {
-        finalProbe = assessNativeResumeProbe({ runtime: "codex", paneCommand: finalCommand, paneContent: finalContent, codexProcessVerified: true });
+        const currentFinalCommand = await this.tmux.getPaneCommand(tmuxSessionName);
+        const currentFinalContent = (await this.tmux.capturePaneContent(tmuxSessionName, 40)) ?? "";
+        finalProbe = assessNativeResumeProbe({ runtime: "codex", paneCommand: currentFinalCommand,
+          paneContent: currentFinalContent, codexProcessVerified: true });
       }
     }
 
@@ -229,8 +245,7 @@ export class CodexResumeAdapter {
     if (finalCommand && SHELL_COMMANDS.has(finalCommand)) {
       // A shell label alone isn't a return to the shell: a launch script still starting Codex holds the pane the
       // same way. Only a proven, stable idle shell ends the resume; anything else keeps the launch for attention.
-      if (await verifyPaneIdleShell({ target: tmuxSessionName, tmux: this.tmux,
-        ...(this.options.listProcesses ? { listProcesses: this.options.listProcesses } : {}) })) {
+      if (finalIdleShell) {
         return {
           ok: false,
           code: "retry_fresh",

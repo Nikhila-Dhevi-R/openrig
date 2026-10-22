@@ -1321,7 +1321,6 @@ export async function createDaemon(opts?: DaemonOptions): Promise<DaemonResult> 
     nodeLauncher,
     startupOrchestrator,
     tmuxAdapter,
-    listProcesses: () => modelCensus.list(),
     tmuxOptionDefaults,
     sessionEnv: launchSessionEnv,
     runtimeSessionEnv,

@@ -218,13 +218,16 @@ describe("Codex runtime adapter", () => {
   });
 
   it("does not promote a stale shell capture after a verified Codex process appears", async () => {
+    let captures = 0;
     const tmux = mockTmux({
       getPaneCommand: vi.fn(async () => "zsh"),
       getPanePid: vi.fn(async () => 900),
-      capturePaneContent: vi.fn(async () => [
-        "  project2 · main",
-        "› codex resume 019a136b-0000-7000-8000-000000000001",
-      ].join("\n")),
+      capturePaneContent: vi.fn(async () => {
+        captures++;
+        return captures === 1
+          ? "› \n  Ready · Context 13% used · anthropic/claude-3.5-sonnet         ⚠ 2 warnings · f2 to view"
+          : "  project2 · main\n› codex resume 019a136b-0000-7000-8000-000000000001";
+      }),
     });
     const adapter = new CodexRuntimeAdapter({
       tmux,
@@ -236,6 +239,7 @@ describe("Codex runtime adapter", () => {
     });
 
     expect(await adapter.checkReady(makeBinding())).toMatchObject({ ready: false });
+    expect(captures).toBe(2);
   });
 
   it("checkReady returns false when the pane has fallen back to a shell prompt", async () => {

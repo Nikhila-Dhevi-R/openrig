@@ -147,6 +147,7 @@ describe("native resume probe", () => {
     it.each([
       "› Continue",
       "› Continue\n  weekly 24% left · Context 81% left",
+      "› Continue\n  Context81 · /project",
       "› Continue\n  Notes · discussing GPT-8-Example medium · more text",
       "› Continue\n  Notes · gpt-like prose · more text",
       "› Continue\n  GPT-8-Example medium",
@@ -170,6 +171,18 @@ describe("native resume probe", () => {
       expect(assessNativeResumeProbe({ runtime: "codex", paneCommand: "zsh", paneContent,
         codexProcessVerified: true,
       })).toMatchObject({ status: "inconclusive", code: "trust_gate" });
+    });
+    it("accepts a verified custom footer after a legacy trust panel has been dismissed", () => {
+      const paneContent = [
+        "Do you trust the contents of this directory?",
+        "› 1. Yes, continue",
+        "  2. No, quit",
+        "› Continue",
+        "  Ready · Context 13% used · anthropic/claude-3.5-sonnet         ⚠ 2 warnings · f2 to view",
+      ].join("\n");
+      expect(assessNativeResumeProbe({ runtime: "codex", paneCommand: "zsh", paneContent,
+        codexProcessVerified: true,
+      })).toMatchObject({ status: "resumed", code: "active_runtime" });
     });
     it.each(["›", "»"])("keeps %s menus blocked with the custom footer", (prompt) => {
       for (const [panel, code] of [
