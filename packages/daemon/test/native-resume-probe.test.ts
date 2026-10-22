@@ -118,11 +118,20 @@ describe("native resume probe", () => {
       }).status).toBe("resumed");
     });
     it.each([
+      "  local-model-7b medium · /project",
+      "  anthropic/claude-3.5-sonnet · /project",
+    ])("recognizes a versioned non-gpt model identifier: %s", (footer) => {
+      expect(assessNativeResumeProbe({ runtime: "codex", paneCommand: "sh",
+        paneContent: `› Continue\n${footer}`,
+      }).status).toBe("resumed");
+    });
+    it.each([
       "› Continue",
       "› Continue\n  weekly 24% left · Context 81% left",
       "› Continue\n  Notes · discussing GPT-8-Example medium · more text",
       "› Continue\n  Notes · gpt-like prose · more text",
       "› Continue\n  GPT-8-Example medium",
+      "› Continue\n  local-model medium · /project",
       reportedFooter,
       `model: loading\n› Continue\n${reportedFooter}`,
     ])("does not promote absent, vague or booting corroboration: %s", (paneContent) => {

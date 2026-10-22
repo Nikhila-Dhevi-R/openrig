@@ -29,6 +29,9 @@ export interface ProbeShellReadyInput {
 }
 
 const SHELL_COMMANDS = new Set(["bash", "fish", "nu", "sh", "tmux", "zsh"]);
+// Provider model identifiers are not limited to the default gpt-* family.
+// Keep the fallback structural so ordinary status prose cannot prove readiness.
+const CODEX_MODEL_FIELD = /^[A-Za-z][A-Za-z0-9._:/@-]*\d[A-Za-z0-9._:/@-]*(?: [A-Za-z][\w-]*)?$/i;
 
 export function buildNativeResumeCommand(
   runtime: string | null,
@@ -440,7 +443,7 @@ function isCodexModelFooterLine(line: string): boolean {
   if (/^\s{2,}gpt-[^\n]+ · [^\n]+$/.test(line)) return true;
   const fields = line.trim().split(" · ");
   return /^[ \t]{2,}\S/.test(line) && fields.length > 1
-    && fields.some((field) => /^gpt-\d[\w.-]*(?: [\w-]+)?$/i.test(field));
+    && fields.some((field) => CODEX_MODEL_FIELD.test(field));
 }
 
 function looksLikeCurrentCodexTrustPrompt(paneContent: string): boolean {
