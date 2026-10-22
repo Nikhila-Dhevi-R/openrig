@@ -408,9 +408,9 @@ function looksLikeCodexTui(paneContent: string, codexProcessVerified: boolean): 
   // corroboration structural: an indented status row and a whole model field,
   // not a model mentioned somewhere in conversation prose.
   // A custom row must not make an unresolved trust/update panel disappear.
-  const hasCustomModelFooter = (hasDelimitedModelFooter || codexProcessVerified && recentLines.split("\n").some(isCodexModelFooterLine))
+  const hasCustomModelFooter = (hasDelimitedModelFooter || codexProcessVerified && hasCodexModelFooterAfterComposer(recentLines))
     && !looksLikeCodexTrustPrompt(current)
-    && !hasCodexUpdateHeader(current) && !current.includes("Updating Codex")
+    && !hasCodexUpdateHeader(current) && !current.includes("Updating Codex");
   return hasPromptLine && (current.includes("OpenAI Codex (v") || hasDefaultModelFooter || hasCustomModelFooter);
 }
 
@@ -459,6 +459,15 @@ function isCodexGptModelFooterLine(line: string): boolean {
 function hasCodexGptModelFooter(paneContent: string): boolean {
   return /(^|\n)\s{2,}gpt-[^\n]+ · [^\n]+(?:\n|$)/i.test(paneContent)
     || paneContent.split("\n").some(isCodexGptModelFooterLine);
+}
+
+function hasCodexModelFooterAfterComposer(paneContent: string): boolean {
+  const lines = paneContent.split("\n");
+  let lastComposer = -1;
+  for (let index = 0; index < lines.length; index += 1) {
+    if (hasCodexComposer(lines[index]!)) lastComposer = index;
+  }
+  return lastComposer >= 0 && lines.slice(lastComposer + 1).some(isCodexModelFooterLine);
 }
 
 function looksLikeCurrentCodexTrustPrompt(paneContent: string): boolean {

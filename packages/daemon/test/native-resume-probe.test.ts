@@ -135,6 +135,15 @@ describe("native resume probe", () => {
         codexProcessVerified: true,
       })).toMatchObject({ status: "resumed", code: "active_runtime" });
     });
+    it("does not promote a verified Codex process while the captured screen is still a shell", () => {
+      const paneContent = [
+        "  project2 · main",
+        "› codex resume 019a136b-0000-7000-8000-000000000001",
+      ].join("\n");
+      expect(assessNativeResumeProbe({ runtime: "codex", paneCommand: "zsh", paneContent,
+        codexProcessVerified: true,
+      }).status).not.toBe("resumed");
+    });
     it.each([
       "› Continue",
       "› Continue\n  weekly 24% left · Context 81% left",
