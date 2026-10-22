@@ -139,8 +139,7 @@ export class CodexResumeAdapter {
     const maxWaitMs = this.options.maxWaitMs ?? 5_000;
     const sleepFn = this.options.sleep ?? sleep;
     const attempts = Math.max(1, Math.floor(maxWaitMs / Math.max(pollMs, 1)) + 1);
-    let idleShellEvidence: boolean | undefined;
-
+    let idleShellRejected = false;
     for (let attempt = 0; attempt < attempts; attempt++) {
       const paneCommand = await this.tmux.getPaneCommand(tmuxSessionName);
       const paneContent = (await this.tmux.capturePaneContent(tmuxSessionName, 40)) ?? "";
@@ -152,11 +151,12 @@ export class CodexResumeAdapter {
 
       if (probe.code === "returned_to_shell" || probe.code === "awaiting_runtime") {
         const returnedToShell = probe.code === "returned_to_shell" && paneCommand && SHELL_COMMANDS.has(paneCommand);
-        if (returnedToShell && idleShellEvidence === undefined) {
-          idleShellEvidence = await verifyPaneIdleShell({ target: tmuxSessionName, tmux: this.tmux,
-            ...(this.options.listProcesses ? { listProcesses: this.options.listProcesses } : {}) });
-        }
-        const process = idleShellEvidence === true ? null : await verifyCodexPaneProcess({ target: tmuxSessionName,
+        const idleShell = returnedToShell && await verifyPaneIdleShell({ target: tmuxSessionName, tmux: this.tmux,
+          ...(this.options.listProcesses ? { listProcesses: this.options.listProcesses } : {}) });
+        // A failed proof records that the foreground changed or was occupied by a wrapper; a later stable shell
+        // sample must not erase that uncertainty for this resume attempt.
+        if (returnedToShell && !idleShell) idleShellRejected = true;
+        const process = idleShell ? null : await verifyCodexPaneProcess({ target: tmuxSessionName,
           tmux: this.tmux as { getPanePid(target: string): Promise<number | null> }, listProcesses: this.options.listProcesses });
         if (process) {
           const currentPaneCommand = await this.tmux.getPaneCommand(tmuxSessionName);
@@ -203,10 +203,11 @@ export class CodexResumeAdapter {
       paneCommand: finalCommand,
       paneContent: finalContent,
     });
-    const finalIdleShell = finalCommand && SHELL_COMMANDS.has(finalCommand)
-      ? idleShellEvidence ?? await verifyPaneIdleShell({ target: tmuxSessionName, tmux: this.tmux,
+    const finalIdleObservation = finalCommand && SHELL_COMMANDS.has(finalCommand)
+      ? await verifyPaneIdleShell({ target: tmuxSessionName, tmux: this.tmux,
         ...(this.options.listProcesses ? { listProcesses: this.options.listProcesses } : {}) })
       : false;
+    const finalIdleShell = finalIdleObservation && !idleShellRejected;
 
     if (finalProbe.code === "returned_to_shell" || finalProbe.code === "awaiting_runtime") {
       const process = finalIdleShell ? null : await verifyCodexPaneProcess({ target: tmuxSessionName,
