@@ -120,10 +120,20 @@ describe("native resume probe", () => {
     it.each([
       "  local-model-7b medium · /project",
       "  anthropic/claude-3.5-sonnet · /project",
-    ])("recognizes a versioned non-gpt model identifier: %s", (footer) => {
+    ])("recognizes a versioned non-gpt model identifier after process verification: %s", (footer) => {
       expect(assessNativeResumeProbe({ runtime: "codex", paneCommand: "sh",
         paneContent: `› Continue\n${footer}`,
+        codexProcessVerified: true,
       }).status).toBe("resumed");
+    });
+    it("recognizes the issue 1764 warning footer after process verification", () => {
+      const paneContent = [
+        "› ",
+        "  Ready · Context 13% used · anthropic/claude-3.5-sonnet         ⚠ 2 warnings · f2 to view",
+      ].join("\n");
+      expect(assessNativeResumeProbe({ runtime: "codex", paneCommand: "zsh", paneContent,
+        codexProcessVerified: true,
+      })).toMatchObject({ status: "resumed", code: "active_runtime" });
     });
     it.each([
       "› Continue",
@@ -132,11 +142,25 @@ describe("native resume probe", () => {
       "› Continue\n  Notes · gpt-like prose · more text",
       "› Continue\n  GPT-8-Example medium",
       "› Continue\n  local-model medium · /project",
+      "› \n  Ready · Context 13% used · anthropic/claude-3.5-sonnet         ⚠ 2 warnings · f2 to view",
+      "  project2 · main\n› ",
+      "  project2 · main\n› codex resume 019a136b-0000-7000-8000-000000000001",
       reportedFooter,
       `model: loading\n› Continue\n${reportedFooter}`,
     ])("does not promote absent, vague or booting corroboration: %s", (paneContent) => {
       expect(assessNativeResumeProbe({ runtime: "codex", paneCommand: "codex", paneContent }).status)
         .toBe("inconclusive");
+    });
+    it("keeps a trust panel authoritative over a look-alike non-gpt footer", () => {
+      const paneContent = [
+        "Do you trust the contents of this directory?",
+        "› 1. Yes, continue",
+        "  2. No, quit",
+        "  Ready · Context 13% used · anthropic/claude-3.5-sonnet         ⚠ 2 warnings · f2 to view",
+      ].join("\n");
+      expect(assessNativeResumeProbe({ runtime: "codex", paneCommand: "zsh", paneContent,
+        codexProcessVerified: true,
+      })).toMatchObject({ status: "inconclusive", code: "trust_gate" });
     });
     it.each(["›", "»"])("keeps %s menus blocked with the custom footer", (prompt) => {
       for (const [panel, code] of [
