@@ -106,6 +106,18 @@ describe("ContextMonitor — Pi usage entries (context lane + burn series)", () 
     expect(observed.contextWindowSize).toBeNull();
   });
 
+  it("does not treat a Pi sample as current when its timestamp or launch time is invalid", () => {
+    entry({ entryId: "e1", entryTimestamp: "not-a-time", inputTokens: 100, outputTokens: 10, cacheReadTokens: 20 });
+    const input = { nodeId: nodeIdRef.value, seatSession: seat, sessionStartedAt: "2026-11-14 08:30:00" };
+    expect(store.readPiUsageAndNormalize(input)).toMatchObject({ availability: "unknown", reason: "no_data" });
+
+    db.prepare("UPDATE pi_usage_entries SET entry_timestamp = ? WHERE entry_id = ?").run("2026-11-14T09:00:00.000Z", "e1");
+    expect(store.readPiUsageAndNormalize({ ...input, sessionStartedAt: "not-a-time" })).toMatchObject({
+      availability: "unknown", reason: "no_data",
+    });
+    expect(store.readPiUsageAndNormalize(input)).toMatchObject({ availability: "known", sessionId: piSession });
+  });
+
   it("writes both the point-in-time row and the series sample on the normal tick", async () => {
     entry({ entryId: "e1", entryTimestamp: "2026-11-14T09:00:00.000Z", inputTokens: 1_000, outputTokens: 100, cacheReadTokens: 40_000 });
     await monitor.pollOnce();

@@ -240,7 +240,9 @@ export class ContextUsageStore {
         | { piSessionId: string; totalInput: number | null; totalOutput: number | null; sampledAt: string | null }
         | undefined;
     if (!row?.piSessionId || row.sampledAt === null) return this.unknownUsage("no_data");
-    if (Date.parse(row.sampledAt) < parseSqliteUtcMs(input.sessionStartedAt)) return this.unknownUsage("no_data");
+    const sampledAtMs = Date.parse(row.sampledAt);
+    const startedAtMs = parseSqliteUtcMs(input.sessionStartedAt);
+    if (!Number.isFinite(sampledAtMs) || !Number.isFinite(startedAtMs) || sampledAtMs < startedAtMs) return this.unknownUsage("no_data");
     return {
       availability: "known",
       reason: null,
